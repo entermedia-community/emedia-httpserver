@@ -215,8 +215,17 @@ public class ClientHandler implements Runnable
     	//log.debug("Response sent for: " + request.getMethod() + " " + request.getRequestURI());
     	Filter filter = getFilter();
     	filter.doFilter(inRequest, inResponse,null);
-    	//inResponse.endTransmission();
-    	inResponse.writeHeaders(); //Make sure its sent
+
+    	try
+    	{
+        	inResponse.endTransmission();
+    		//inResponse.writeHeaders(); //Make sure its sent
+    	}
+    	catch (Throwable ex)
+    	{
+    		//client disconnected
+    		log.error("cant send render " + ex);
+    	}
 	}
 
 //	

@@ -70,25 +70,27 @@ public class ChunkedOutputStream extends OutputStream
              toclientstream.flush();
          }
 
-         public void end() throws IOException {
-        	 if (getHttpResponse().isChunked()) {
-                 // Write final chunk
-                 toclientstream.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8));
-                 toclientstream.flush();
-                 return;
-             }
-        	 if( !isClosed() )
-        	 {
-        		 toclientstream.close();
-        		 setClosed(true);
-        	 }
-         }
+//         public void end() throws IOException {
+//        	 if (getHttpResponse().isChunked()) {
+//                 // Write final chunk
+//                 toclientstream.write("0\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+//                 toclientstream.flush();
+//                 return;
+//             }
+//        	 if( !isClosed() )
+//        	 {
+//        		 close();
+//        		 //toclientstream.close();
+//        		 setClosed(true);
+//        	 }
+//         }
          @Override
          public void close() throws IOException {
 //        	 if (getHttpResponse().isChunked()) {
 //        		 end();
 //        		 return;
 //             }
+        	 getHttpResponse().writeHeaders();
         	 if( !isClosed() )
         	 {
 	             setClosed(true);

@@ -17,6 +17,8 @@ import java.util.Map;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.entermediadb.httpserver.main.CookieManager;
 import org.entermediadb.httpserver.util.ChunkedOutputStream;
 import org.entermediadb.httpserver.util.DelegatingServletOutputStream;
@@ -24,6 +26,8 @@ import org.entermediadb.httpserver.util.OutputFiller;
 import org.entermediadb.httpserver.util.SimpleDateFormatPerThread;
 
 public class HttpResponse implements HttpServletResponse {
+    private static final Log log = LogFactory.getLog(HttpResponse.class);
+
     private final ChunkedOutputStream chunkedoutputStream;
     private int status = SC_OK;
     private String statusMessage = "OK";
@@ -74,17 +78,39 @@ public class HttpResponse implements HttpServletResponse {
     private boolean headersSent = false;
 
     public void writeHeaders() throws IOException {
-        if (!headersSent) {
 //            if (!headers.containsKey("Content-Length") && !isChunked) {
 //                // If neither content-length nor chunked encoding is set,
 //                // default to chunked encoding
 //                headers.put("Transfer-Encoding", "chunked");
 //                isChunked = true;
 //            }
-            writeResponseHeaders();
+        committed = true;
+        if( !headersSent )
+        {
             headersSent = true;
-            committed = true;
-        }
+            StringBuilder responseHeader = new StringBuilder();
+            responseHeader.append("HTTP/1.1 ").append(status).append(" ").append(statusMessage).append("\r\n");
+            
+            // Add cookies
+                for (javax.servlet.http.Cookie cookie : getCookieManager().getAllCookies() ) {
+                    responseHeader.append("Set-Cookie: ").append(encodeCookie(cookie)).append("\r\n");
+                }
+            if( getStatus() == 304 )
+            {
+            	log.info("Wiring header" + responseHeader);
+            	setContentLength(0);
+            }
+
+            // Add other headers
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                responseHeader.append(header.getKey()).append(": ").append(header.getValue()).append("\r\n");
+            }
+            responseHeader.append("\r\n");
+            getWriter().write(responseHeader.toString());
+            getWriter().flush();
+//            chunkedoutputStream.toClientStream().write(responseHeader.toString().getBytes(StandardCharsets.UTF_8));
+//            chunkedoutputStream.toClientStream().flush();
+        } 
     }
 
 
@@ -94,24 +120,6 @@ public class HttpResponse implements HttpServletResponse {
             servletOutputStream = new DelegatingServletOutputStream(chunkedoutputStream);
         }
         return servletOutputStream;
-    }
-
-	public void writeResponseHeaders() throws IOException {
-        StringBuilder responseHeader = new StringBuilder();
-        responseHeader.append("HTTP/1.1 ").append(status).append(" ").append(statusMessage).append("\r\n");
-        
-        // Add cookies
-            for (javax.servlet.http.Cookie cookie : getCookieManager().getAllCookies() ) {
-                responseHeader.append("Set-Cookie: ").append(encodeCookie(cookie)).append("\r\n");
-            }
-
-        // Add other headers
-        for (Map.Entry<String, String> header : headers.entrySet()) {
-            responseHeader.append(header.getKey()).append(": ").append(header.getValue()).append("\r\n");
-        }
-        responseHeader.append("\r\n");
-        chunkedoutputStream.toClientStream().write(responseHeader.toString().getBytes(StandardCharsets.UTF_8));
-        chunkedoutputStream.toClientStream().flush();
     }
 
     @Override
@@ -452,6 +460,8 @@ public class HttpResponse implements HttpServletResponse {
 
 	public void endTransmission() throws IOException
 	{
-		chunkedoutputStream.end();
+		writeHeaders();
+		getWriter().flush();
+		chunkedoutputStream.close();
 	}
 } 
