@@ -3,8 +3,9 @@ package org.entermediadb.httpserver.http;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.StringReader;
-import java.net.InetAddress;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,14 +32,20 @@ import javax.servlet.http.HttpSession;
 import javax.servlet.http.HttpUpgradeHandler;
 import javax.servlet.http.Part;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.entermediadb.httpserver.main.ClientHandler;
 import org.entermediadb.httpserver.main.CookieManager;
+import org.entermediadb.httpserver.util.DelegatingServletInputStream;
 
 public class HttpRequest implements HttpServletRequest {
+	
+    private static final Log log = LogFactory.getLog(HttpRequest.class);
+
     private String method;
     private String path;
     private String httpVersion;
     private Map<String, Collection> headers = new HashMap<>();
-    private String body;
     private Map<String, String[]> parameters = new HashMap<>();
     private String characterEncoding = "UTF-8";
     private String queryString;
@@ -53,9 +60,12 @@ public class HttpRequest implements HttpServletRequest {
     private ServletContext servletContext;
     private HttpSession session;
     private Map<String, Object> attributes = new HashMap<>();
+    private InputStream fromClientInputStream;
     private BufferedReader reader;
-    private ServletInputStream inputStream;
+    private ServletInputStream servletinputStream;
     protected org.entermediadb.httpserver.http.HttpSession fieldClientSession;
+
+    
     protected CookieManager fieldCookieManager;
     public CookieManager getCookieManager()
 	{
@@ -72,7 +82,11 @@ public class HttpRequest implements HttpServletRequest {
 
 
 	// Constructor
-    public HttpRequest() {
+    public HttpRequest(InputStream input, BufferedReader inreader) 
+    {
+    	fromClientInputStream = input;
+    	reader = inreader;
+    	
 //        try {
 //            InetAddress localHost = InetAddress.getLocalHost();
 //            this.localAddr = localHost.getHostAddress();
@@ -89,7 +103,6 @@ public class HttpRequest implements HttpServletRequest {
     public void setMethod(String method) { this.method = method; }
     public void setPath(String path) { this.path = path; }
     public void setHttpVersion(String version) { this.httpVersion = version; }
-    public void setBody(String body) { this.body = body; }
     public void setQueryString(String queryString) { this.queryString = queryString; }
     public void setRemoteAddr(String addr) { this.remoteAddr = addr; }
     public void setRemotePort(int port) { this.remotePort = port; }
@@ -285,28 +298,10 @@ public class HttpRequest implements HttpServletRequest {
 
     @Override
     public ServletInputStream getInputStream() {
-        if (reader != null) {
-            throw new IllegalStateException("getReader() has already been called");
+        if (servletinputStream == null) {
+        	servletinputStream = new DelegatingServletInputStream(fromClientInputStream);
         }
-        if (inputStream == null) {
-            final ByteArrayInputStream byteStream = new ByteArrayInputStream(body != null ? body.getBytes() : new byte[0]);
-            inputStream = new ServletInputStream() {
-                @Override
-                public boolean isFinished() { return false; }
-
-                @Override
-                public boolean isReady() { return true; }
-
-                @Override
-                public void setReadListener(ReadListener readListener) { }
-
-                @Override
-                public int read() throws IOException {
-                    return byteStream.read();
-                }
-            };
-        }
-        return inputStream;
+        return servletinputStream;
     }
 
     @Override
@@ -356,12 +351,6 @@ public class HttpRequest implements HttpServletRequest {
 
     @Override
     public BufferedReader getReader() throws IOException {
-        if (inputStream != null) {
-            throw new IllegalStateException("getInputStream() has already been called");
-        }
-        if (reader == null) {
-            reader = new BufferedReader(new StringReader(body != null ? body : ""));
-        }
         return reader;
     }
 
@@ -497,15 +486,37 @@ public class HttpRequest implements HttpServletRequest {
         }
 
         // Parse POST parameters from body
-        if ("POST".equalsIgnoreCase(method) && body != null) {
+        if ("POST".equalsIgnoreCase(method)) {
             String contentType = getContentType();
             if (contentType != null && contentType.startsWith("application/x-www-form-urlencoded")) {
+            	String body = readBody();
                 addParameters(body);
             }
         }
     }
 
-    private void addParameters(String params) {
+    private String readBody()
+	{
+    	StringBuffer all = new StringBuffer();
+    	try
+    	{
+	    	String nextline = getReader().readLine();
+	    	while(nextline != null)
+	    	{
+	    		all.append(nextline);
+	    		nextline = getReader().readLine();
+	    	}
+    	}
+    	catch( Exception ex)
+    	{
+    		log.error(ex);
+    	}
+    	return all.toString();
+	}
+
+
+
+	private void addParameters(String params) {
         for (String param : params.split("&")) {
             String[] pair = param.split("=", 2);
             String name = pair[0];

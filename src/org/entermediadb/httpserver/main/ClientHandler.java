@@ -2,6 +2,7 @@ package org.entermediadb.httpserver.main;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.Socket;
@@ -80,9 +81,7 @@ public class ClientHandler implements Runnable
         try {
             while (!clientSocket.isClosed()) {
                 if (webSocketManager == null) {
-
-                    BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                    HttpRequest request = parseRequest(in);
+                    HttpRequest request = parseRequest(clientSocket.getInputStream());
                     if (request == null) break;
 
                     if (WebSocketManager.isWebSocketUpgradeRequest(request)) {
@@ -108,14 +107,14 @@ public class ClientHandler implements Runnable
         }
     }
 
-    private HttpRequest parseRequest(BufferedReader in) throws IOException
+    private HttpRequest parseRequest(InputStream in) throws IOException
     {
     	//java.net.SocketTimeoutException  Allways have headers to read right?
         String requestLine = null; 
-        
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
         try
         {
-        	requestLine  = in.readLine();
+        	requestLine  = reader.readLine();
         }
         catch( SocketTimeoutException ex)
         {
@@ -128,8 +127,7 @@ public class ClientHandler implements Runnable
             log.warn("Invalid request line received: " + requestLine);
             return null;
         }
-
-        HttpRequest request = new HttpRequest();
+        HttpRequest request = new HttpRequest(in,reader);
         
         // Set basic request information
         request.setMethod(requestParts[0]);
@@ -153,7 +151,7 @@ public class ClientHandler implements Runnable
 
         // Parse headers
         String headerLine;
-        while ((headerLine = in.readLine()) != null && !headerLine.isEmpty()) {
+        while ((headerLine = reader.readLine()) != null && !headerLine.isEmpty()) {
             String[] headerParts = headerLine.split(": ", 2);
             if (headerParts.length == 2) {
                 request.addHeader(headerParts[0], headerParts[1]);
@@ -174,6 +172,7 @@ public class ClientHandler implements Runnable
         // Parse cookies from Cookie header
         request.setCookieManager(cookieManager);
 
+        /*
         // Parse body if Content-Length is present
         if (request.getHeader("Content-Length") != null) {
             int contentLength = request.getContentLength();
@@ -184,7 +183,8 @@ public class ClientHandler implements Runnable
             }
             request.setBody(new String(body, 0, bytesRead));
         }
-
+		*/
+        
         // Parse parameters from query string and/or body
         request.parseParameters();
 
@@ -216,6 +216,7 @@ public class ClientHandler implements Runnable
     	Filter filter = getFilter();
     	filter.doFilter(inRequest, inResponse,null);
     	//inResponse.endTransmission();
+    	inResponse.writeHeaders(); //Make sure its sent
 	}
 
 //	

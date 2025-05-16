@@ -109,9 +109,9 @@ public class HttpResponse implements HttpServletResponse {
         for (Map.Entry<String, String> header : headers.entrySet()) {
             responseHeader.append(header.getKey()).append(": ").append(header.getValue()).append("\r\n");
         }
-
         responseHeader.append("\r\n");
         chunkedoutputStream.toClientStream().write(responseHeader.toString().getBytes(StandardCharsets.UTF_8));
+        chunkedoutputStream.toClientStream().flush();
     }
 
     @Override
